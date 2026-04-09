@@ -1,0 +1,41 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Indigo primary scale */
+  --color-pulse-50: #eef2ff;
+  --color-pulse-100: #e0e7ff;
+  --color-pulse-200: #c7d2fe;
+  --color-pulse-300: #a5b4fc;
+  --color-pulse-500: #6366f1;
+  --color-pulse-600: #4f46e5;
+  --color-pulse-700: #4338ca;
+  --color-pulse-800: #3730a3;
+  --color-pulse-900: #312e81;
+
+  /* Lavender accents */
+  --color-lavender-50: #faf5ff;
+  --color-lavender-100: #f5f3ff;
+  --color-lavender-200: #ede9fe;
+  --color-lavender-300: #ddd6fe;
+  --color-lavender-400: #c4b5fd;
+
+  --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji';
+}
+
+html {
+  @apply antialiased;
+}
+
+body {
+  @apply m-0 min-h-dvh bg-white text-slate-800;
+  background-image: radial-gradient(
+    ellipse 120% 80% at 100% -20%,
+    var(--color-lavender-100) 0%,
+    transparent 55%
+  );
+}
+
+#root {
+  @apply min-h-dvh;
+}
