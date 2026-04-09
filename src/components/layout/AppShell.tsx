@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 
 type AppShellProps = {
   children: ReactNode;
+  rightSlot?: ReactNode;
 };
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, rightSlot }: AppShellProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="border-b border-lavender-200 bg-pulse-700 text-white shadow-sm">
@@ -18,8 +19,9 @@ export function AppShell({ children }: AppShellProps) {
             </span>
             <span className="text-lg font-semibold tracking-tight">Pulse</span>
           </div>
-          <nav className="text-sm text-pulse-100">
+          <nav className="flex items-center gap-2 text-sm text-pulse-100">
             <span className="rounded-md bg-white/10 px-3 py-1.5">Dashboard</span>
+            {rightSlot}
           </nav>
         </div>
       </header>
