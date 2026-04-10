@@ -7,6 +7,7 @@ export type VideoRecord = {
   fileName: string;
   mimeType: string;
   sizeBytes: number;
+  durationSeconds?: number | null;
   s3Url: string;
   /** JPEG extracted from the video on the worker (ffmpeg); may be missing for older uploads. */
   thumbnailUrl?: string | null;
@@ -14,6 +15,14 @@ export type VideoRecord = {
   sensitivityStatus: string;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type PaginatedResponse<T> = {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 };
 
 export type UploadAcceptedResponse = {

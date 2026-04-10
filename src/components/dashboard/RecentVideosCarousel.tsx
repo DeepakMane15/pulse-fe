@@ -3,7 +3,7 @@ import { VideoPreviewMedia } from '../video/VideoPreviewMedia';
 import { api } from '../../lib/api';
 import { getStoredUser } from '../../lib/auth';
 import { getVideoSocket } from '../../lib/socket';
-import type { VideoRecord } from '../../types/video';
+import type { PaginatedResponse, VideoRecord } from '../../types/video';
 
 function ChevronLeft({ className }: { className?: string }) {
   return (
@@ -43,8 +43,10 @@ export function RecentVideosCarousel() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const { data } = await api.get<{ data: VideoRecord[] }>('/videos?limit=10');
-      setVideos(data.data ?? []);
+      const { data } = await api.get<{ data: PaginatedResponse<VideoRecord> }>(
+        '/videos?page=1&limit=10'
+      );
+      setVideos(data.data.items ?? []);
     } catch {
       setError('Could not load videos.');
       setVideos([]);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { VideoPreviewMedia } from '../../../components/video/VideoPreviewMedia';
 import { api } from '../../../lib/api';
 import { getVideoSocket } from '../../../lib/socket';
-import type { VideoRecord } from '../../../types/video';
+import type { PaginatedResponse, VideoRecord } from '../../../types/video';
 
 function Badge({
   children,
@@ -39,8 +39,25 @@ function sensitivityTone(s: string): 'neutral' | 'ok' | 'warn' | 'bad' {
   return 'neutral';
 }
 
+function formatSizeMb(sizeBytes: number): string {
+  return (sizeBytes / (1024 * 1024)).toFixed(2);
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '';
+  const total = Math.floor(seconds);
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
 function VideoCard({ v }: { v: VideoRecord }) {
   const title = v.title?.trim() || v.fileName;
+  const durationText = formatDuration(v.durationSeconds);
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm transition hover:border-pulse-300 hover:shadow-md">
@@ -75,7 +92,7 @@ function VideoCard({ v }: { v: VideoRecord }) {
           {v.fileName}
         </p>
         <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-600">
-          <span>{(v.sizeBytes / (1024 * 1024)).toFixed(2)} MB</span>
+          <span>{formatSizeMb(v.sizeBytes)} MB</span>
           <span>
             {v.createdAt
               ? new Date(v.createdAt).toLocaleString(undefined, {
@@ -85,6 +102,7 @@ function VideoCard({ v }: { v: VideoRecord }) {
               : '—'}
           </span>
         </div>
+        {durationText ? <p className="text-xs text-slate-500">Duration: {durationText}</p> : null}
         {v.s3Url ? (
           <a
             href={v.s3Url}
@@ -101,22 +119,43 @@ function VideoCard({ v }: { v: VideoRecord }) {
 }
 
 export default function VideoLibraryPage() {
+  const PAGE_SIZE = 9;
   const [rows, setRows] = useState<VideoRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [safetyFilter, setSafetyFilter] = useState<'all' | 'safe' | 'flagged'>('all');
+  const [searchText, setSearchText] = useState('');
+  const [appliedSafetyFilter, setAppliedSafetyFilter] = useState<'all' | 'safe' | 'flagged'>(
+    'all'
+  );
+  const [appliedSearchText, setAppliedSearchText] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
-      const { data } = await api.get<{ data: VideoRecord[] }>('/videos?limit=200');
-      setRows(data.data ?? []);
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        safety: appliedSafetyFilter,
+        q: appliedSearchText.trim()
+      });
+      const { data } = await api.get<{ data: PaginatedResponse<VideoRecord> }>(`/videos?${params}`);
+      setRows(data.data.items ?? []);
+      setTotal(data.data.total ?? 0);
+      setTotalPages(Math.max(1, data.data.totalPages ?? 1));
     } catch {
       setError('Could not load videos.');
       setRows([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, appliedSafetyFilter, appliedSearchText]);
 
   useEffect(() => {
     load();
@@ -131,11 +170,87 @@ export default function VideoLibraryPage() {
     };
   }, [load]);
 
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const hasPendingChanges =
+    safetyFilter !== appliedSafetyFilter || searchText.trim() !== appliedSearchText.trim();
+  const hasActiveFilters = appliedSafetyFilter !== 'all' || appliedSearchText.trim().length > 0;
+
+  const applyFilters = () => {
+    setPage(1);
+    setAppliedSafetyFilter(safetyFilter);
+    setAppliedSearchText(searchText.trim());
+  };
+
+  const resetFilters = () => {
+    setSafetyFilter('all');
+    setSearchText('');
+    setAppliedSafetyFilter('all');
+    setAppliedSearchText('');
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-pulse-900">Video Library</h1>
       </div>
+
+      <div className="rounded-xl border border-lavender-200 bg-white p-4">
+        <div className="grid gap-3 md:grid-cols-3">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Safety status
+              <select
+                value={safetyFilter}
+                onChange={(e) =>
+                  setSafetyFilter(e.target.value as 'all' | 'safe' | 'flagged')
+                }
+                className="rounded-lg border border-lavender-300 px-3 py-2 text-sm text-slate-900 outline-none ring-pulse-500 focus:ring-2"
+              >
+                <option value="all">All</option>
+                <option value="safe">Safe</option>
+                <option value="flagged">Flagged</option>
+              </select>
+            </label>
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-700">
+              Search (date, size, duration, title, file)
+              <input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="e.g. 2026, 12.50 mb, 02:15"
+                className="rounded-lg border border-lavender-300 px-3 py-2 text-sm text-slate-900 outline-none ring-pulse-500 placeholder:text-slate-400 focus:ring-2"
+              />
+            </label>
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={applyFilters}
+            disabled={!hasPendingChanges}
+            className="rounded-lg bg-pulse-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-pulse-800"
+          >
+            Apply filters
+          </button>
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters && !hasPendingChanges}
+            className="rounded-lg border border-lavender-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 hover:bg-lavender-50"
+          >
+            Reset filters
+          </button>
+          {hasPendingChanges ? (
+            <span className="text-xs text-slate-500">You have unapplied changes</span>
+          ) : null}
+          {hasActiveFilters && !hasPendingChanges ? (
+            <span className="text-xs text-slate-500">Filters applied</span>
+          ) : null}
+          </div>
+        </div>
 
       {error && (
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
@@ -147,8 +262,43 @@ export default function VideoLibraryPage() {
         <p className="text-center text-sm text-slate-500 py-12">Loading…</p>
       )}
 
-      {!loading && !error && rows.length === 0 && (
-        <p className="text-center text-sm text-slate-500 py-12">No videos yet.</p>
+      {!loading && !error && total === 0 && (
+        <p className="text-center text-sm text-slate-500 py-12">
+          {hasActiveFilters ? 'No videos match your applied filters.' : 'No videos yet.'}
+        </p>
+      )}
+
+      {!loading && !error && total > 0 && rows.length === 0 && (
+        <p className="text-center text-sm text-slate-500 py-12">No videos on this page.</p>
+      )}
+
+      {!loading && !error && total > 0 && (
+        <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+          <p>
+            Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-lavender-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border border-lavender-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
 
       {!loading && !error && rows.length > 0 && (
@@ -156,6 +306,35 @@ export default function VideoLibraryPage() {
           {rows.map((v) => (
             <VideoCard key={v._id} v={v} />
           ))}
+        </div>
+      )}
+
+      {!loading && !error && total > 0 && (
+        <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
+          <p>
+            Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, total)} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-md border border-lavender-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-md border border-lavender-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
     </div>
