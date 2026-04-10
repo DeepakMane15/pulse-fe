@@ -12,9 +12,9 @@ function jobStatusLabel(status: string): string {
     case 'pending':
       return 'Queued for processing…';
     case 'analyzing':
-      return 'Analyzing content (moderation)…';
+      return 'Uploading to storage and scanning content…';
     case 'uploading':
-      return 'Copying to storage…';
+      return 'Finalizing (poster & library)…';
     case 'completed':
       return 'Processing complete.';
     case 'failed':
