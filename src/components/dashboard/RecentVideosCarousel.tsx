@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { VideoPreviewMedia } from '../video/VideoPreviewMedia';
 import { api } from '../../lib/api';
 import { getStoredUser } from '../../lib/auth';
 import { getVideoSocket } from '../../lib/socket';
@@ -116,16 +117,36 @@ export function RecentVideosCarousel() {
             <p className="px-2 py-8 text-sm text-slate-500">No videos yet.</p>
           )}
           {!loading &&
-            videos.map((v) => (
+            videos.map((v) => {
+              const title = v.title?.trim() || v.fileName;
+              return (
               <article
                 key={v._id}
                 className="w-56 shrink-0 rounded-xl border border-lavender-200 bg-gradient-to-b from-lavender-50/80 to-white p-4 shadow-sm"
               >
-                <div className="mb-3 flex aspect-video items-center justify-center rounded-lg bg-pulse-900/5 text-xs font-medium text-pulse-700">
-                  Video
+                <div className="mb-3 overflow-hidden rounded-lg bg-black">
+                  {v.s3Url ? (
+                    <a
+                      href={v.s3Url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="relative block aspect-video"
+                      aria-label={`Watch ${title}`}
+                    >
+                      <VideoPreviewMedia
+                        s3Url={v.s3Url}
+                        thumbnailUrl={v.thumbnailUrl}
+                        label={title}
+                      />
+                    </a>
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center text-xs text-slate-500">
+                      No URL
+                    </div>
+                  )}
                 </div>
                 <h3 className="line-clamp-2 text-sm font-semibold text-pulse-900">
-                  {v.title?.trim() || v.fileName}
+                  {title}
                 </h3>
                 <p className="mt-1 text-xs text-slate-500">
                   {v.createdAt
@@ -145,11 +166,12 @@ export function RecentVideosCarousel() {
                     rel="noreferrer"
                     className="mt-3 inline-block text-xs font-medium text-pulse-700 underline-offset-2 hover:underline"
                   >
-                    Open file URL
+                    Open in new tab
                   </a>
                 ) : null}
               </article>
-            ))}
+              );
+            })}
         </div>
       </div>
     </section>

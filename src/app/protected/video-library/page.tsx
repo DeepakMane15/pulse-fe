@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { VideoPreviewMedia } from '../../../components/video/VideoPreviewMedia';
 import { api } from '../../../lib/api';
 import { getVideoSocket } from '../../../lib/socket';
 import type { VideoRecord } from '../../../types/video';
@@ -38,6 +39,67 @@ function sensitivityTone(s: string): 'neutral' | 'ok' | 'warn' | 'bad' {
   return 'neutral';
 }
 
+function VideoCard({ v }: { v: VideoRecord }) {
+  const title = v.title?.trim() || v.fileName;
+
+  return (
+    <article className="group flex flex-col overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm transition hover:border-pulse-300 hover:shadow-md">
+      <div className="relative aspect-video overflow-hidden bg-black">
+        {v.s3Url ? (
+          <a
+            href={v.s3Url}
+            target="_blank"
+            rel="noreferrer"
+            className="block h-full w-full"
+            aria-label={`Watch ${title}`}
+          >
+            <VideoPreviewMedia
+              s3Url={v.s3Url}
+              thumbnailUrl={v.thumbnailUrl}
+              label={title}
+            />
+          </a>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">No URL</div>
+        )}
+        <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex flex-wrap gap-1">
+          <Badge tone={processingTone(v.processingStatus)}>{v.processingStatus}</Badge>
+          <Badge tone={sensitivityTone(v.sensitivityStatus)}>{v.sensitivityStatus}</Badge>
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <h2 className="line-clamp-2 text-base font-semibold text-pulse-900">
+          {v.title?.trim() || v.fileName}
+        </h2>
+        <p className="line-clamp-1 text-xs text-slate-500" title={v.fileName}>
+          {v.fileName}
+        </p>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-600">
+          <span>{(v.sizeBytes / (1024 * 1024)).toFixed(2)} MB</span>
+          <span>
+            {v.createdAt
+              ? new Date(v.createdAt).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                })
+              : '—'}
+          </span>
+        </div>
+        {v.s3Url ? (
+          <a
+            href={v.s3Url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 inline-flex items-center justify-center rounded-lg bg-pulse-700 px-3 py-2 text-sm font-semibold text-white hover:bg-pulse-800"
+          >
+            Open in new tab
+          </a>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
 export default function VideoLibraryPage() {
   const [rows, setRows] = useState<VideoRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,79 +135,29 @@ export default function VideoLibraryPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-pulse-900">Video Library</h1>
-        <p className="mt-1 text-slate-600">
-          All videos in your workspace, with processing and moderation status.
-        </p>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-lavender-200 bg-lavender-50/80 text-xs font-semibold uppercase tracking-wide text-pulse-800">
-              <tr>
-                <th className="px-4 py-3">Title</th>
-                <th className="px-4 py-3">File</th>
-                <th className="px-4 py-3">Size</th>
-                <th className="px-4 py-3">Processing</th>
-                <th className="px-4 py-3">Sensitivity</th>
-                <th className="px-4 py-3">Uploaded</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-lavender-100">
-              {loading && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {!loading && error && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-amber-800">
-                    {error}
-                  </td>
-                </tr>
-              )}
-              {!loading && !error && rows.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    No videos yet.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                !error &&
-                rows.map((v) => (
-                  <tr key={v._id} className="hover:bg-lavender-50/50">
-                    <td className="px-4 py-3 font-medium text-pulse-900">
-                      {v.title?.trim() || '—'}
-                    </td>
-                    <td className="max-w-[200px] truncate px-4 py-3 text-slate-600" title={v.fileName}>
-                      {v.fileName}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {(v.sizeBytes / (1024 * 1024)).toFixed(2)} MB
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={processingTone(v.processingStatus)}>{v.processingStatus}</Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge tone={sensitivityTone(v.sensitivityStatus)}>{v.sensitivityStatus}</Badge>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                      {v.createdAt
-                        ? new Date(v.createdAt).toLocaleString(undefined, {
-                            dateStyle: 'medium',
-                            timeStyle: 'short'
-                          })
-                        : '—'}
-                    </td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
+      {error && (
+        <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+          {error}
+        </p>
+      )}
+
+      {loading && (
+        <p className="text-center text-sm text-slate-500 py-12">Loading…</p>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
+        <p className="text-center text-sm text-slate-500 py-12">No videos yet.</p>
+      )}
+
+      {!loading && !error && rows.length > 0 && (
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((v) => (
+            <VideoCard key={v._id} v={v} />
+          ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }

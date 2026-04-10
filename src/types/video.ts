@@ -8,6 +8,8 @@ export type VideoRecord = {
   mimeType: string;
   sizeBytes: number;
   s3Url: string;
+  /** JPEG extracted from the video on the worker (ffmpeg); may be missing for older uploads. */
+  thumbnailUrl?: string | null;
   processingStatus: string;
   sensitivityStatus: string;
   createdAt?: string;
