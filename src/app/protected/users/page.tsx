@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../../lib/api';
 
 type UserRow = {
@@ -11,32 +12,39 @@ type UserRow = {
 };
 
 export default function ManageUsersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tenantIdFilter = searchParams.get('tenantId')?.trim() || '';
+  const tenantLabel = searchParams.get('tenant')?.trim() || '';
+
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      setError(null);
+      const path =
+        tenantIdFilter.length > 0
+          ? `/users?tenantId=${encodeURIComponent(tenantIdFilter)}`
+          : '/users';
+      const { data } = await api.get<{ data: UserRow[] }>(path);
+      setRows(data.data ?? []);
+    } catch {
+      setError('Could not load users.');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [tenantIdFilter]);
+
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await api.get<{ data: UserRow[] }>('/users');
-        if (!cancelled) {
-          setRows(data.data ?? []);
-          setError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('Could not load users.');
-          setRows([]);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    loadUsers();
+  }, [loadUsers]);
+
+  function clearTenantFilter() {
+    setSearchParams({});
+  }
 
   return (
     <div className="space-y-6">
@@ -45,6 +53,29 @@ export default function ManageUsersPage() {
         <p className="mt-1 text-slate-600">
           Users visible to your role (tenant admins see their tenant; super-admins see all).
         </p>
+        {tenantIdFilter ? (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-lavender-200 bg-lavender-50/80 px-4 py-3 text-sm">
+            <span className="text-slate-700">
+              Showing users for tenant{' '}
+              <strong className="text-pulse-900">
+                {tenantLabel || tenantIdFilter}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={clearTenantFilter}
+              className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-pulse-800 shadow-sm ring-1 ring-lavender-200 hover:bg-lavender-50"
+            >
+              Show all users
+            </button>
+            <Link
+              to="/tenants"
+              className="text-xs font-medium text-pulse-700 underline underline-offset-2 hover:text-pulse-900"
+            >
+              Back to tenants
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm">
