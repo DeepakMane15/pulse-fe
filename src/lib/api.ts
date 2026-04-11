@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios';
+import { persistor } from '../store';
 import { clearSession } from './session';
 
 /**
@@ -43,6 +44,7 @@ api.interceptors.response.use(
       url.includes('/auth/login') || url.endsWith('auth/login');
     if (status === 401 && !isAuthLogin) {
       clearSession();
+      void persistor.purge();
       if (window.location.pathname !== '/login') {
         window.location.assign('/login');
       }

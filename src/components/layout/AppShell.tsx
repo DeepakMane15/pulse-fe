@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { clearSession, getStoredUser } from '../../lib/auth';
+import { persistor } from '../../store';
 import { hasClearance, PERMISSIONS } from '../../lib/clearances';
 
 type AppShellProps = {
@@ -31,6 +32,7 @@ export function AppShell({ children }: AppShellProps) {
 
   function logout() {
     clearSession();
+    void persistor.purge();
     setProfileOpen(false);
     navigate('/login', { replace: true });
   }

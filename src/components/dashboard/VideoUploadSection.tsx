@@ -3,9 +3,22 @@ import { api } from '../../lib/api';
 import { getStoredUser } from '../../lib/auth';
 import { hasClearance, PERMISSIONS } from '../../lib/clearances';
 import { getVideoSocket } from '../../lib/socket';
+import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import {
+  applyJobUpdate,
+  clearIfTenantMismatch,
+  reset,
+  setDescription,
+  setFileMeta,
+  setHttpPercent,
+  setInlineError,
+  setTitle,
+  startSending,
+  syncJobFromApi,
+  uploadAccepted,
+  uploadFailed
+} from '../../store/videoUploadSlice';
 import type { UploadAcceptedResponse, VideoJobSocketPayload } from '../../types/video';
-
-type Phase = 'idle' | 'sending' | 'processing' | 'done' | 'error';
 
 function jobStatusLabel(status: string): string {
   switch (status) {
@@ -28,31 +41,31 @@ export function VideoUploadSection() {
   const user = getStoredUser();
   const canUpload = user ? hasClearance(user.clearanceLevel, PERMISSIONS.UPLOAD_VIDEO) : false;
 
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const dispatch = useAppDispatch();
+  const phase = useAppSelector((s) => s.videoUpload.phase);
+  const jobId = useAppSelector((s) => s.videoUpload.jobId);
+  const jobStatus = useAppSelector((s) => s.videoUpload.jobStatus);
+  const jobProgress = useAppSelector((s) => s.videoUpload.jobProgress);
+  const httpPercent = useAppSelector((s) => s.videoUpload.httpPercent);
+  const errorMessage = useAppSelector((s) => s.videoUpload.errorMessage);
+  const savedAsTitle = useAppSelector((s) => s.videoUpload.savedAsTitle);
+  const title = useAppSelector((s) => s.videoUpload.title);
+  const description = useAppSelector((s) => s.videoUpload.description);
+  const fileMeta = useAppSelector((s) => s.videoUpload.fileMeta);
+
   const [file, setFile] = useState<File | null>(null);
-  const [savedAsTitle, setSavedAsTitle] = useState<string | null>(null);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [httpPercent, setHttpPercent] = useState(0);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [jobStatus, setJobStatus] = useState<string>('pending');
-  const [jobProgress, setJobProgress] = useState(0);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const reset = useCallback(() => {
-    setPhase('idle');
-    setHttpPercent(0);
-    setJobId(null);
-    setJobStatus('pending');
-    setJobProgress(0);
-    setErrorMessage(null);
+  const resetForm = useCallback(() => {
+    dispatch(reset());
     setFile(null);
-    setTitle('');
-    setDescription('');
-    setSavedAsTitle(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  }, []);
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!user?.tenantId) return;
+    dispatch(clearIfTenantMismatch(user.tenantId));
+  }, [dispatch, user?.tenantId]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -69,27 +82,15 @@ export function VideoUploadSection() {
       ) {
         return;
       }
-      setJobStatus(payload.status);
-      if (typeof payload.progress === 'number') {
-        setJobProgress(Math.min(100, Math.max(0, payload.progress)));
-      }
-      if (payload.errorMessage) setErrorMessage(payload.errorMessage);
-      if (payload.status === 'completed') {
-        setPhase('done');
-        setJobProgress(100);
-      }
-      if (payload.status === 'failed') {
-        setPhase('error');
-      }
+      dispatch(applyJobUpdate(payload));
     };
 
     socket.on('video:job:update', onUpdate);
     return () => {
       socket.off('video:job:update', onUpdate);
     };
-  }, [jobId, user?.tenantId]);
+  }, [jobId, user?.tenantId, dispatch]);
 
-  /** One-shot sync if the tab opened mid-job or the socket missed the first events (no interval). */
   useEffect(() => {
     if (!jobId) return;
     if (phase !== 'processing') return;
@@ -102,14 +103,12 @@ export function VideoUploadSection() {
         if (cancelled) return;
         const s = data.data.status;
         if (s === 'completed' || s === 'failed') {
-          setJobStatus(s);
-          if (data.data.errorMessage) setErrorMessage(data.data.errorMessage);
-          if (s === 'completed') {
-            setPhase('done');
-            setJobProgress(100);
-          } else {
-            setPhase('error');
-          }
+          dispatch(
+            syncJobFromApi({
+              status: s,
+              errorMessage: data.data.errorMessage
+            })
+          );
         }
       } catch {
         /* socket is primary; ignore */
@@ -118,22 +117,18 @@ export function VideoUploadSection() {
     return () => {
       cancelled = true;
     };
-  }, [jobId, phase]);
+  }, [jobId, phase, dispatch]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!canUpload || !file) return;
+    if (!canUpload || !file || !user?.tenantId) return;
     const trimmedTitle = title.trim();
     if (!trimmedTitle) {
-      setErrorMessage('Please enter a video title.');
+      dispatch(setInlineError('Please enter a video title.'));
       return;
     }
 
-    setErrorMessage(null);
-    setPhase('sending');
-    setHttpPercent(0);
-    setJobProgress(0);
-    setJobStatus('pending');
+    dispatch(startSending({ tenantId: user.tenantId }));
 
     try {
       const formData = new FormData();
@@ -145,26 +140,26 @@ export function VideoUploadSection() {
         timeout: 600_000,
         onUploadProgress: (ev) => {
           if (ev.total) {
-            setHttpPercent(Math.round((ev.loaded / ev.total) * 100));
+            dispatch(setHttpPercent(Math.round((ev.loaded / ev.total) * 100)));
           }
         }
       });
 
-      const id = String(data.data.jobId);
-      setJobId(id);
-      setJobStatus(data.data.status);
-      setSavedAsTitle(
-        data.data.titleAdjusted && data.data.title ? data.data.title.trim() : null
+      dispatch(
+        uploadAccepted({
+          jobId: String(data.data.jobId),
+          status: data.data.status,
+          titleAdjusted: Boolean(data.data.titleAdjusted),
+          title: data.data.title ?? null,
+          tenantId: user.tenantId
+        })
       );
-      setPhase('processing');
-      setJobProgress(data.data.status === 'pending' ? 8 : 15);
     } catch (err: unknown) {
-      setPhase('error');
       const msg =
         err && typeof err === 'object' && 'response' in err
           ? String((err as { response?: { data?: { message?: string } } }).response?.data?.message)
           : 'Upload failed';
-      setErrorMessage(msg || 'Upload failed');
+      dispatch(uploadFailed(msg || 'Upload failed'));
     }
   }
 
@@ -193,7 +188,8 @@ export function VideoUploadSection() {
       <h2 className="text-lg font-semibold text-pulse-900">Upload video</h2>
       <p className="mt-1 text-sm text-slate-600">
         File is sent to the API, then processed in the background. Status updates arrive over the
-        socket.
+        socket. Progress is saved if you leave this page or refresh (in-flight browser upload cannot
+        resume after refresh).
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>
@@ -207,7 +203,7 @@ export function VideoUploadSection() {
             name="title"
             required
             value={title}
-            onChange={(ev) => setTitle(ev.target.value)}
+            onChange={(ev) => dispatch(setTitle(ev.target.value))}
             className="w-full rounded-lg border border-lavender-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-pulse-500 focus:ring-2 focus:ring-pulse-500/25"
             placeholder="e.g. Q1 kickoff"
             disabled={phase === 'sending' || phase === 'processing'}
@@ -226,7 +222,7 @@ export function VideoUploadSection() {
             name="description"
             rows={3}
             value={description}
-            onChange={(ev) => setDescription(ev.target.value)}
+            onChange={(ev) => dispatch(setDescription(ev.target.value))}
             className="w-full rounded-lg border border-lavender-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-pulse-500 focus:ring-2 focus:ring-pulse-500/25"
             placeholder="Short summary or notes"
             disabled={phase === 'sending' || phase === 'processing'}
@@ -243,6 +239,7 @@ export function VideoUploadSection() {
             onChange={(ev) => {
               const f = ev.target.files?.[0];
               setFile(f ?? null);
+              dispatch(setFileMeta(f ? { name: f.name, size: f.size } : null));
             }}
             disabled={phase === 'sending' || phase === 'processing'}
           />
@@ -256,6 +253,16 @@ export function VideoUploadSection() {
                   <span className="font-medium text-pulse-900">{file.name}</span>
                   <span className="mt-1 block text-xs text-slate-500">
                     {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                </>
+              ) : fileMeta && (phase === 'processing' || phase === 'done' || phase === 'error') ? (
+                <>
+                  <span className="font-medium text-pulse-900">{fileMeta.name}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    {(fileMeta.size / (1024 * 1024)).toFixed(2)} MB
+                  </span>
+                  <span className="mt-2 block text-xs text-slate-500">
+                    {phase === 'processing' ? 'Upload complete — processing…' : 'File reference'}
                   </span>
                 </>
               ) : (
@@ -310,7 +317,7 @@ export function VideoUploadSection() {
           {(phase === 'done' || phase === 'error') && (
             <button
               type="button"
-              onClick={reset}
+              onClick={resetForm}
               className="rounded-lg border border-lavender-300 bg-white px-4 py-2.5 text-sm font-medium text-pulse-800 hover:bg-lavender-50"
             >
               Upload another

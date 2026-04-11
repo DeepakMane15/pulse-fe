@@ -8,6 +8,7 @@ type UserRow = {
   id: string;
   email: string;
   tenantId: string;
+  tenantName?: string | null;
   roleId: string;
   roleName: string | null;
   isActive: boolean;
@@ -372,7 +373,16 @@ export default function ManageUsersPage() {
                   <tr key={u.id} className="hover:bg-lavender-50/50">
                     <td className="px-4 py-3 font-medium text-pulse-900">{u.email}</td>
                     <td className="px-4 py-3 text-slate-700">{u.roleName ?? '—'}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{u.tenantId}</td>
+                    <td
+                      className="px-4 py-3 text-slate-700"
+                      title={u.tenantName ? `Tenant id: ${u.tenantId}` : undefined}
+                    >
+                      {u.tenantName?.trim() ? (
+                        u.tenantName
+                      ) : (
+                        <span className="font-mono text-xs text-slate-600">{u.tenantId}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       {u.isActive ? (
                         <span className="text-emerald-700">Yes</span>
