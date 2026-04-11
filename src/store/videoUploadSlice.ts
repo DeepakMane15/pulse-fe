@@ -39,21 +39,24 @@ export const videoUploadSlice = createSlice({
   reducers: {
     reset: () => ({ ...initialState }),
 
-    setInlineError: (state, action: PayloadAction<string | null>) => {
+    setInlineError: (state: VideoUploadState, action: PayloadAction<string | null>) => {
       state.errorMessage = action.payload;
     },
 
-    setTitle: (state, action: PayloadAction<string>) => {
+    setTitle: (state: VideoUploadState, action: PayloadAction<string>) => {
       state.title = action.payload;
     },
-    setDescription: (state, action: PayloadAction<string>) => {
+    setDescription: (state: VideoUploadState, action: PayloadAction<string>) => {
       state.description = action.payload;
     },
-    setFileMeta: (state, action: PayloadAction<{ name: string; size: number } | null>) => {
+    setFileMeta: (
+      state: VideoUploadState,
+      action: PayloadAction<{ name: string; size: number } | null>
+    ) => {
       state.fileMeta = action.payload;
     },
 
-    startSending: (state, action: PayloadAction<{ tenantId: string }>) => {
+    startSending: (state: VideoUploadState, action: PayloadAction<{ tenantId: string }>) => {
       state.phase = 'sending';
       state.httpPercent = 0;
       state.jobProgress = 0;
@@ -64,12 +67,12 @@ export const videoUploadSlice = createSlice({
       state.contextTenantId = action.payload.tenantId;
     },
 
-    setHttpPercent: (state, action: PayloadAction<number>) => {
+    setHttpPercent: (state: VideoUploadState, action: PayloadAction<number>) => {
       state.httpPercent = action.payload;
     },
 
     uploadAccepted: (
-      state,
+      state: VideoUploadState,
       action: PayloadAction<{
         jobId: string;
         status: string;
@@ -89,7 +92,7 @@ export const videoUploadSlice = createSlice({
       state.jobProgress = action.payload.status === 'pending' ? 8 : 15;
     },
 
-    applyJobUpdate: (state, action: PayloadAction<VideoJobSocketPayload>) => {
+    applyJobUpdate: (state: VideoUploadState, action: PayloadAction<VideoJobSocketPayload>) => {
       const p = action.payload;
       if (state.jobId && String(p.jobId) !== state.jobId) return;
       state.jobStatus = p.status;
@@ -107,7 +110,7 @@ export const videoUploadSlice = createSlice({
     },
 
     syncJobFromApi: (
-      state,
+      state: VideoUploadState,
       action: PayloadAction<{ status: string; errorMessage?: string | null }>
     ) => {
       const { status } = action.payload;
@@ -122,13 +125,13 @@ export const videoUploadSlice = createSlice({
       }
     },
 
-    uploadFailed: (state, action: PayloadAction<string>) => {
+    uploadFailed: (state: VideoUploadState, action: PayloadAction<string>) => {
       state.phase = 'error';
       state.errorMessage = action.payload;
     },
 
     /** Page refresh during HTTP upload — cannot resume. */
-    markSendInterrupted: (state) => {
+    markSendInterrupted: (state: VideoUploadState) => {
       if (state.phase !== 'sending') return;
       state.phase = 'error';
       state.errorMessage =
@@ -139,7 +142,10 @@ export const videoUploadSlice = createSlice({
       state.jobProgress = 0;
     },
 
-    clearIfTenantMismatch: (state, action: PayloadAction<string | undefined>) => {
+    clearIfTenantMismatch: (
+      state: VideoUploadState,
+      action: PayloadAction<string | undefined>
+    ) => {
       const tid = action.payload;
       if (!tid || !state.contextTenantId) return;
       if (tid !== state.contextTenantId) {

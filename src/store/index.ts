@@ -1,4 +1,4 @@
-import { combineReducers, configureStore } from '@reduxjs/toolkit';
+import { combineReducers, configureStore, type Reducer } from '@reduxjs/toolkit';
 import {
   FLUSH,
   PAUSE,
@@ -10,11 +10,17 @@ import {
   persistStore
 } from 'redux-persist';
 import { persistStorage } from './persistStorage';
-import { markSendInterrupted, videoUploadSlice } from './videoUploadSlice';
+import { markSendInterrupted, videoUploadSlice, type VideoUploadState } from './videoUploadSlice';
 
 const rootReducer = combineReducers({
   videoUpload: videoUploadSlice.reducer
 });
+
+/** Matches redux-persist’s `_persist` slice after rehydration. */
+export type RootState = {
+  videoUpload: VideoUploadState;
+  _persist?: { version: number; rehydrated: boolean };
+};
 
 const persistConfig = {
   key: 'pulse-root',
@@ -24,9 +30,13 @@ const persistConfig = {
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);
 
-export const store = configureStore({
-  reducer: persistedReducer,
-  middleware: (getDefaultMiddleware) =>
+type ConfigureRootOpts = NonNullable<Parameters<typeof configureStore<RootState>>[0]>;
+type MiddlewareFnRoot = NonNullable<ConfigureRootOpts['middleware']>;
+type GetDefaultMiddleware = Parameters<MiddlewareFnRoot>[0];
+
+export const store = configureStore<RootState>({
+  reducer: persistedReducer as Reducer<RootState>,
+  middleware: (getDefaultMiddleware: GetDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER]
@@ -41,5 +51,4 @@ export const persistor = persistStore(store, undefined, () => {
   }
 });
 
-export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;
