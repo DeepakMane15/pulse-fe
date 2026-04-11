@@ -193,7 +193,7 @@ export function VideoUploadSection() {
       <h2 className="text-lg font-semibold text-pulse-900">Upload video</h2>
       <p className="mt-1 text-sm text-slate-600">
         File is sent to the API, then processed in the background. Status updates arrive over the
-        socket (no repeated polling).
+        socket.
       </p>
 
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>

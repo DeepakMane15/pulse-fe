@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { VideoPreviewMedia } from '../../../components/video/VideoPreviewMedia';
 import { api } from '../../../lib/api';
 import { getVideoSocket } from '../../../lib/socket';
@@ -55,7 +56,13 @@ function formatDuration(seconds: number | null | undefined): string {
   return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
-function VideoCard({ v }: { v: VideoRecord }) {
+function VideoCard({
+  v,
+  playerHref
+}: {
+  v: VideoRecord;
+  playerHref: string;
+}) {
   const title = v.title?.trim() || v.fileName;
   const durationText = formatDuration(v.durationSeconds);
 
@@ -63,10 +70,8 @@ function VideoCard({ v }: { v: VideoRecord }) {
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm transition hover:border-pulse-300 hover:shadow-md">
       <div className="relative aspect-video overflow-hidden bg-black">
         {v.s3Url ? (
-          <a
-            href={v.s3Url}
-            target="_blank"
-            rel="noreferrer"
+          <Link
+            to={playerHref}
             className="block h-full w-full"
             aria-label={`Watch ${title}`}
           >
@@ -75,7 +80,7 @@ function VideoCard({ v }: { v: VideoRecord }) {
               thumbnailUrl={v.thumbnailUrl}
               label={title}
             />
-          </a>
+          </Link>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">No URL</div>
         )}
@@ -103,16 +108,6 @@ function VideoCard({ v }: { v: VideoRecord }) {
           </span>
         </div>
         {durationText ? <p className="text-xs text-slate-500">Duration: {durationText}</p> : null}
-        {v.s3Url ? (
-          <a
-            href={v.s3Url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 inline-flex items-center justify-center rounded-lg bg-pulse-700 px-3 py-2 text-sm font-semibold text-white hover:bg-pulse-800"
-          >
-            Open in new tab
-          </a>
-        ) : null}
       </div>
     </article>
   );
@@ -132,6 +127,7 @@ export default function VideoLibraryPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [searchParams] = useSearchParams();
 
   const load = useCallback(async () => {
     try {
@@ -193,6 +189,24 @@ export default function VideoLibraryPage() {
     setAppliedSearchText('');
     setPage(1);
   };
+
+  useEffect(() => {
+    const fromUrlPage = Number(searchParams.get('page') ?? '');
+    const fromUrlSafety = searchParams.get('safety');
+    const fromUrlQ = searchParams.get('q') ?? '';
+
+    if (Number.isFinite(fromUrlPage) && fromUrlPage > 0) {
+      setPage(fromUrlPage);
+    }
+    if (fromUrlSafety === 'all' || fromUrlSafety === 'safe' || fromUrlSafety === 'flagged') {
+      setSafetyFilter(fromUrlSafety);
+      setAppliedSafetyFilter(fromUrlSafety);
+    }
+    setSearchText(fromUrlQ);
+    setAppliedSearchText(fromUrlQ);
+    // one-time hydrate from URL
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -304,7 +318,11 @@ export default function VideoLibraryPage() {
       {!loading && !error && rows.length > 0 && (
         <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((v) => (
-            <VideoCard key={v._id} v={v} />
+            <VideoCard
+              key={v._id}
+              v={v}
+              playerHref={`/video-player?videoId=${encodeURIComponent(v._id)}&page=${page}&limit=${PAGE_SIZE}&safety=${appliedSafetyFilter}&q=${encodeURIComponent(appliedSearchText)}`}
+            />
           ))}
         </div>
       )}

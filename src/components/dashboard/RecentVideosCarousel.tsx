@@ -1,9 +1,61 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { VideoPreviewMedia } from '../video/VideoPreviewMedia';
 import { api } from '../../lib/api';
 import { getStoredUser } from '../../lib/auth';
 import { getVideoSocket } from '../../lib/socket';
 import type { PaginatedResponse, VideoRecord } from '../../types/video';
+
+function Badge({
+  children,
+  tone
+}: {
+  children: React.ReactNode;
+  tone: 'neutral' | 'ok' | 'warn' | 'bad';
+}) {
+  const styles = {
+    neutral: 'bg-slate-100 text-slate-800 ring-slate-200',
+    ok: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+    warn: 'bg-amber-50 text-amber-900 ring-amber-200',
+    bad: 'bg-red-50 text-red-800 ring-red-200'
+  } as const;
+  return (
+    <span
+      className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ring-1 ${styles[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function processingTone(s: string): 'neutral' | 'ok' | 'warn' | 'bad' {
+  if (s === 'completed') return 'ok';
+  if (s === 'failed') return 'bad';
+  if (s === 'processing') return 'warn';
+  return 'neutral';
+}
+
+function sensitivityTone(s: string): 'neutral' | 'ok' | 'warn' | 'bad' {
+  if (s === 'safe') return 'ok';
+  if (s === 'flagged') return 'bad';
+  return 'neutral';
+}
+
+function formatSizeMb(sizeBytes: number): string {
+  return (sizeBytes / (1024 * 1024)).toFixed(2);
+}
+
+function formatDuration(seconds: number | null | undefined): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '';
+  const total = Math.floor(seconds);
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
 
 function ChevronLeft({ className }: { className?: string }) {
   return (
@@ -30,6 +82,58 @@ function ChevronRight({ className }: { className?: string }) {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function RecentVideoCard({ v }: { v: VideoRecord }) {
+  const title = v.title?.trim() || v.fileName;
+  const durationText = formatDuration(v.durationSeconds);
+  const playerHref = `/video-player?videoId=${encodeURIComponent(v._id)}&page=1&limit=10&safety=all&q=`;
+
+  return (
+    <article className="group flex w-80 shrink-0 flex-col overflow-hidden rounded-2xl border border-lavender-200 bg-white shadow-sm transition hover:border-pulse-300 hover:shadow-md">
+      <div className="relative aspect-video overflow-hidden bg-black">
+        {v.s3Url ? (
+          <Link
+            to={playerHref}
+            className="block h-full w-full"
+            aria-label={`Watch ${title}`}
+          >
+            <VideoPreviewMedia
+              s3Url={v.s3Url}
+              thumbnailUrl={v.thumbnailUrl}
+              label={title}
+            />
+          </Link>
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">No URL</div>
+        )}
+        <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex flex-wrap gap-1">
+          <Badge tone={processingTone(v.processingStatus)}>{v.processingStatus}</Badge>
+          <Badge tone={sensitivityTone(v.sensitivityStatus)}>{v.sensitivityStatus}</Badge>
+        </div>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-4">
+        <h2 className="line-clamp-2 text-base font-semibold text-pulse-900">
+          {v.title?.trim() || v.fileName}
+        </h2>
+        <p className="line-clamp-1 text-xs text-slate-500" title={v.fileName}>
+          {v.fileName}
+        </p>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2 text-xs text-slate-600">
+          <span>{formatSizeMb(v.sizeBytes)} MB</span>
+          <span>
+            {v.createdAt
+              ? new Date(v.createdAt).toLocaleString(undefined, {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                })
+              : '—'}
+          </span>
+        </div>
+        {durationText ? <p className="text-xs text-slate-500">Duration: {durationText}</p> : null}
+      </div>
+    </article>
   );
 }
 
@@ -74,7 +178,7 @@ export function RecentVideosCarousel() {
   const scrollByDir = (dir: -1 | 1) => {
     const el = scrollRef.current;
     if (!el) return;
-    const w = Math.min(320, el.clientWidth * 0.85);
+    const w = Math.min(340, el.clientWidth * 0.85);
     el.scrollBy({ left: dir * w, behavior: 'smooth' });
   };
 
@@ -119,61 +223,8 @@ export function RecentVideosCarousel() {
             <p className="px-2 py-8 text-sm text-slate-500">No videos yet.</p>
           )}
           {!loading &&
-            videos.map((v) => {
-              const title = v.title?.trim() || v.fileName;
-              return (
-              <article
-                key={v._id}
-                className="w-56 shrink-0 rounded-xl border border-lavender-200 bg-gradient-to-b from-lavender-50/80 to-white p-4 shadow-sm"
-              >
-                <div className="mb-3 overflow-hidden rounded-lg bg-black">
-                  {v.s3Url ? (
-                    <a
-                      href={v.s3Url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="relative block aspect-video"
-                      aria-label={`Watch ${title}`}
-                    >
-                      <VideoPreviewMedia
-                        s3Url={v.s3Url}
-                        thumbnailUrl={v.thumbnailUrl}
-                        label={title}
-                      />
-                    </a>
-                  ) : (
-                    <div className="flex aspect-video items-center justify-center text-xs text-slate-500">
-                      No URL
-                    </div>
-                  )}
-                </div>
-                <h3 className="line-clamp-2 text-sm font-semibold text-pulse-900">
-                  {title}
-                </h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  {v.createdAt
-                    ? new Date(v.createdAt).toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                      })
-                    : '—'}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {(v.sizeBytes / (1024 * 1024)).toFixed(2)} MB · {v.processingStatus}
-                </p>
-                {v.s3Url ? (
-                  <a
-                    href={v.s3Url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-block text-xs font-medium text-pulse-700 underline-offset-2 hover:underline"
-                  >
-                    Open in new tab
-                  </a>
-                ) : null}
-              </article>
-              );
-            })}
+            !error &&
+            videos.map((v) => <RecentVideoCard key={v._id} v={v} />)}
         </div>
       </div>
     </section>

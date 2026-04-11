@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios';
+import { clearSession } from './session';
 
 /**
  * Base URL for the Pulse API (includes `/api` prefix).
@@ -36,6 +37,16 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
+    const status = error.response?.status;
+    const url = String(error.config?.url ?? '');
+    const isAuthLogin =
+      url.includes('/auth/login') || url.endsWith('auth/login');
+    if (status === 401 && !isAuthLogin) {
+      clearSession();
+      if (window.location.pathname !== '/login') {
+        window.location.assign('/login');
+      }
+    }
     return Promise.reject(error);
   }
 );

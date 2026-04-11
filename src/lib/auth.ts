@@ -1,9 +1,9 @@
 import { isAxiosError } from 'axios';
 import type { AuthUser, LoginResponseBody } from '../types/auth';
 import { api } from './api';
+import { TOKEN_KEY, USER_KEY, clearSession } from './session';
 
-const TOKEN_KEY = 'pulse_access_token';
-const USER_KEY = 'pulse_user';
+export { clearSession };
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -17,11 +17,6 @@ export function getStoredUser(): AuthUser | null {
   } catch {
     return null;
   }
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
 }
 
 export async function loginWithPassword(

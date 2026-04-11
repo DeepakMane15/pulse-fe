@@ -8,6 +8,7 @@ import HomePage from './protected/page';
 import TenantsPage from './protected/tenants/page';
 import ManageUsersPage from './protected/users/page';
 import VideoLibraryPage from './protected/video-library/page';
+import VideoPlayerPage from './protected/video-player/page';
 
 /**
  * App Router–style tree: root layout → public login | protected shell → home.
@@ -27,6 +28,11 @@ export const appRouter = createBrowserRouter([
             path: 'video-library',
             element: <ClearanceLayout requiredMask={PERMISSIONS.VIEW_VIDEO} />,
             children: [{ index: true, element: <VideoLibraryPage /> }]
+          },
+          {
+            path: 'video-player',
+            element: <ClearanceLayout requiredMask={PERMISSIONS.VIEW_VIDEO} />,
+            children: [{ index: true, element: <VideoPlayerPage /> }]
           },
           {
             path: 'tenants',
